@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flask import Blueprint, request, render_template, make_response
-
+from flask import Blueprint, request, render_template, make_response, session, current_app as app
+from flask_session import Session
+from datetime import timedelta
 from rucio.api.authentication import get_auth_token_x509
 from rucio.common.config import config_get, config_get_bool
 from rucio.web.rest.flaskapi.v1.common import generate_http_error_flask
@@ -26,9 +27,15 @@ POLICY = config_get('policy', 'permission')
 ATLAS_URLS = ()
 OTHER_URLS = ()
 
+app.config["SECRET_KEY"] = "rucio"
+app.config["SESSION_TYPE"] = "memcached"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=60)
+
+Session(app)
+
 
 def auth():
-    auth_type = request.cookies.get('x-rucio-auth-type')
+    auth_type = session["x-rucio-auth-type"]
     if str(auth_type).lower() == 'x509':
         token = get_token(get_auth_token_x509)
         if token:
@@ -66,7 +73,7 @@ def oidc():
 
 
 def oidc_final():
-    session_token = request.cookies.get('x-rucio-auth-token')
+    session_token = session["x-rucio-auth-token"]
     return finalize_auth(session_token, 'OIDC')
 
 

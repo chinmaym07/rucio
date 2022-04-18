@@ -69,3 +69,5 @@ sh~=1.14.2                                                  # Convenience librar
 apispec==5.1.1                                              # Generate OpenApi definition out of pydoc comments
 apispec-webframeworks==0.5.2                                # Integration of apispec in Flask
 
+# Flask session in web ui
+flask-session==0.4.0                                        # Used for Server Side Sessions in Flask web ui

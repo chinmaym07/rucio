@@ -20,7 +20,7 @@ from json import dumps, load
 from os.path import dirname, join
 from time import time
 
-from flask import request, render_template, redirect, make_response
+from flask import request, render_template, redirect, make_response, session
 from six.moves.urllib.parse import quote, unquote
 
 from rucio.api import authentication as auth, identity
@@ -113,8 +113,8 @@ def prepare_saml_request(environ, data):
 
 
 def add_cookies(response, cookie={}):
-    for int_cookie in cookie:
-        response.set_cookie(**int_cookie)
+    for key in cookie:
+        session[key] = cookie[key]
 
     return(response)
 
@@ -124,7 +124,7 @@ def redirect_to_last_known_url(cookie):
     Checks if there is preferred path in cookie and redirects to it.
     :returns: redirect to last known path
     """
-    requested_path = request.cookies.get('rucio-requested-path')
+    requested_path = session['rucio-requested-path']
     if not requested_path:
         requested_path = request.environ.get('REQUEST_URI')
     resp = add_cookies(make_response(redirect(requested_path, code=303)), cookie)
@@ -176,7 +176,7 @@ def select_account_name(identitystr, identity_type, vo=None):
             if account_info.account_type == AccountType.USER:
                 def_account = account
                 break
-        selected_account = request.cookies.get('rucio-selected-account')
+        selected_account = session['rucio-selected-account']
         if (selected_account):
             def_account = selected_account
         ui_account = def_account
@@ -220,7 +220,7 @@ def validate_webui_token(from_cookie=True, session_token=None):
     :returns: None or token validation dictionary
     """
     if from_cookie:
-        session_token = request.cookies.get('x-rucio-auth-token')
+        session_token = session['x-rucio-auth-token']
     if session_token:
         session_token = unquote(session_token)
     valid_token_dict = auth.validate_auth_token(session_token)
@@ -433,7 +433,7 @@ def saml_auth(method, data=None):
     SAML_PATH = join(dirname(__file__), 'saml/')
     req = prepare_saml_request(request.environ, data)
     samlauth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_PATH)
-    saml_user_data = request.cookies.get('saml-user-data')
+    saml_user_data = session['saml-user-data']
     if not MULTI_VO:
         ui_vo = 'def'
     elif hasattr(data, 'vo') and data.vo:
@@ -450,7 +450,7 @@ def saml_auth(method, data=None):
         if not saml_user_data:
             return redirect(samlauth.login(), code=303)
         # If user data is present but token is not valid, create a new one
-        saml_nameid = request.cookies.get('saml-nameid')
+        saml_nameid = session['saml-nameid']
         if ui_account is None and ui_vo is None:
             ui_account, ui_vo = select_account_name(saml_nameid, 'saml', ui_vo)
         elif ui_account is None:
@@ -533,7 +533,17 @@ def saml_auth(method, data=None):
             token = get_token(auth.get_auth_token_saml, acc=ui_account, vo=ui_vo, idt=saml_nameid)
             if not token:
                 if MULTI_VO:
-                    return render_template("problem.html", msg=('Cannot get auth token. It is possible that the presented identity %s is not mapped to any Rucio account %s at VO %s.') % (html_escape(saml_nameid), html_escape(ui_account), html_escape(ui_vo)))
+                    return render_template(
+                        "problem.html",
+                        msg=(
+                            "Cannot get auth token. It is possible that the presented identity %s is not mapped to any Rucio account %s at VO %s."
+                        )
+                        % (
+                            html_escape(saml_nameid),
+                            html_escape(ui_account),
+                            html_escape(ui_vo),
+                        ),
+                    )
                 else:
                     return render_template("problem.html", msg=('Cannot get auth token. It is possible that the presented identity %s is not mapped to any Rucio account %s.') % (html_escape(saml_nameid), html_escape(ui_account)))
             return finalize_auth(token, 'saml', cookie_extra)
